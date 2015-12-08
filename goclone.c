@@ -22,6 +22,7 @@
 
 // FIXME
 #include <sys/mount.h>
+#include <sys/syscall.h>
 
 #include <dirent.h>
 #include <errno.h>
@@ -184,6 +185,29 @@ static void join_cgroups(goclone_cmd *cmd)
     }
 }
 
+// The RHEL67 kernel has the 'setns' syscall, but glibc does not.
+// So we re-implment the very-lightweight syscall wrapper here
+// for the x86_64 ABI via GCC inline assembly.
+//
+static int64_t setns_compat(int fd, int nstype)
+{
+    int64_t result;
+    asm volatile (
+        "syscall"
+      : /* outputs */
+        "=a" (result)    // rax holds the result
+      : /* inputs */
+        "a" (SYS_setns), // rax = syscall number
+        "D" (fd),        // rdi = argument: fd
+        "S" (nstype)     // rsi = argument: nstype
+      : /* clobbers, as per the x86_64 ABI */
+        "cc",
+        "r11",
+        "rcx"
+    );
+    return result;
+}
+
 // Joins a namespace listed in one of the name space fields.
 static void join_namespace(char *namespace)
 {
@@ -196,7 +220,7 @@ static void join_namespace(char *namespace)
     if (fd == -1) {
         _exit(EX_OSERR);
     }
-    if (setns(fd, 0) != 0) {
+    if (setns_compat(fd, 0) != 0) {
         _exit(EX_OSERR);
     }
     if (close(fd) != 0) {

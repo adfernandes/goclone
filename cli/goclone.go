@@ -26,7 +26,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/liquidgecka/goclone"
+	"github.com/adfernandes/goclone"
 )
 
 var (
